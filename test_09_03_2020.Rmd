@@ -1,0 +1,271 @@
+---
+title: "Test_09_03_2020"
+author: "Yihuan Huang"
+date: "9/3/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+source("function_0822.R")
+library(stats)
+library(dplyr)
+library ("ISLR")
+library (glmnet)
+library(gglasso)
+library(stringr)
+library(combinat)
+library(parallel)
+library(MASS)
+library(future.apply)
+library(Metrics) ## AUC function for categorical outcome variable
+```
+
+# Laptop Dataset
+```{r}
+df <- read.csv("laptops.csv")
+
+df$Inches <- ifelse(df$Inches == 11.3 | df$Inches == 11.6, 11, df$Inches)
+df$Inches <- ifelse(df$Inches == 12 | df$Inches == 12.5 | df$Inches == 12.3, 11, df$Inches)
+df$Inches <- ifelse(df$Inches == 13.3 | df$Inches == 13.9 | df$Inches == 13.5, 13, df$Inches)
+df$Inches <- ifelse(df$Inches == 14.1, 13, df$Inches)
+df$Inches <- ifelse(df$Inches == 15.4 | df$Inches == 15.6, 15, df$Inches)
+df$Inches <- ifelse(df$Inches == 17 | df$Inches == 17.3, 15, df$Inches)
+df <- df[df$Inches != 10.1 & df$Inches != 18.4, ]
+
+df$Weight <- str_extract(df$Weight, "\\d\\.?+\\d?")
+df$Weight <- as.numeric(df$Weight)
+
+reordered_levels <- levels(df$Memory)[order(table(df$Memory))]
+df$Memory_reordered <- factor(df$Memory, levels = reordered_levels)
+df$Memory_reordered <- droplevels(factor(df$Memory, levels = reordered_levels))
+
+df$Inches <- as.factor(df$Inches)
+reordered_levels <- levels(df$Inches)[order(table(df$Inches))]
+df$Inches <- factor(df$Inches, levels = reordered_levels)
+
+df$Ram <- as.factor(df$Ram)
+reordered_levels <- levels(df$Ram)[order(table(df$Ram))]
+df$Ram <- factor(df$Ram, levels = reordered_levels)
+
+df$OpSys <- as.factor(df$OpSys)
+levels(df$OpSys) <- c("Others", "Others", "Linux", "Linux", "Linux", "Others", "Windows", "Windows", "Windows")
+reordered_levels <- levels(df$OpSys)[order(table(df$OpSys))]
+df$OpSys <- factor(df$OpSys, levels = reordered_levels)
+
+df$TypeName <- as.factor(df$TypeName)
+reordered_levels <- levels(df$TypeName)[order(table(df$TypeName))]
+df$TypeName <- factor(df$TypeName, levels = reordered_levels)
+
+df$Company <- as.factor(df$Company)
+reordered_levels <- levels(df$Company)[order(table(df$Company))]
+df$Company <- factor(df$Company, levels = reordered_levels)
+```
+
+```{r}
+training_prop <- 0.6
+n_observ <- dim(df)[1]
+size <-  training_prop * n_observ
+samp <- sort(sample(seq(n_observ), size =size))
+train_df <- df[samp,]
+test_df <- df[-samp,]
+```
+
+#################################
+## Input:
+### train_df ### 
+### cols_tobeCoded ###
+### other_predictors = NULL ###
+### y_col ###
+### seed = 99999 ###
+### standardize = FALSE ###
+### intercept = TRUE ###
+#################################
+
+## Case 1: Normal
+```{r}
+cols_tobeCoded = c("OpSys", "Inches")
+other_predictors = c("Weight")
+y_col = c("Price_euros")
+seed <- 99999
+standardize <- FALSE
+intercept <- TRUE
+```
+
+```{r}
+result_from_training <- training(train_df = train_df, 
+                                 cols_tobeCoded = c("OpSys", "Inches"), 
+                                 other_predictors = c("Weight"), 
+                                 y_col = c("Price_euros"))
+```
+```{r}
+testing(test_df, result_from_training)
+```
+
+## Case 2: No other predictors
+
+```{r}
+result_from_training <- training(train_df = train_df, 
+                                 cols_tobeCoded = c("OpSys", "Inches"), 
+                                 other_predictors = NULL, 
+                                 y_col = c("Price_euros"))
+```
+
+```{r}
+testing(test_df, result_from_training)
+```
+
+## Case 3: One predictor to be coded & Two other predictors
+
+```{r}
+result_from_training <- training(train_df = train_df, 
+                                 cols_tobeCoded = c("OpSys"), 
+                                 other_predictors = c("Inches", "Weight"),
+                                 y_col =  c("Price_euros"))
+```
+
+```{r}
+testing(test_df, result_from_training)
+```
+
+## Case 4: Change Default Parameters
+```{r}
+result_from_training <- training(train_df = train_df, 
+                                 cols_tobeCoded = c("OpSys"), 
+                                 other_predictors = c("Inches", "Weight"),
+                                 y_col =  c("Price_euros"),
+                                 seed = 999,
+                                 standardize = TRUE,
+                                 intercept = TRUE)
+```
+
+```{r}
+testing(test_df, result_from_training)
+```
+
+# Wage Dataset
+
+## Case 1: Normal 
+```{r}
+wage_data <- Wage
+```
+
+```{r}
+training_prop <- 0.6
+n_observ <- dim(wage_data)[1]
+size <-  training_prop * n_observ
+samp <- sort(sample(seq(n_observ), size = size))
+train_df <- wage_data[samp,]
+test_df <- wage_data[-samp,]
+```
+
+## Case 1: Normal
+```{r}
+result_from_training <- training(train_df = train_df, 
+                                 cols_tobeCoded = c("maritl"), 
+                                 other_predictors = c("age"),
+                                 y_col =  c("wage"),
+                                 seed = 999,
+                                 standardize = TRUE,
+                                 intercept = TRUE)
+```
+
+```{r}
+testing(test_df, result_from_training)
+```
+
+## Case 2: Two factors to be Coded
+```{r}
+result_from_training <- training(train_df = train_df, 
+                                 cols_tobeCoded = c("maritl", "race"), 
+                                 other_predictors = c("age"),
+                                 y_col =  c("wage"),
+                                 seed = 999,
+                                 standardize = TRUE,
+                                 intercept = TRUE)
+```
+
+```{r}
+testing(test_df, result_from_training)
+```
+
+## Case 3: Categorical Outcome Variables 
+```{r}
+result_from_training <- training(train_df = train_df, 
+                                 cols_tobeCoded = c("maritl"), 
+                                 other_predictors = c("age"),
+                                 y_col =  c("race"),
+                                 seed = 999,
+                                 standardize = TRUE,
+                                 intercept = TRUE,
+                                 fit_family = "multinomial")
+```
+
+```{r}
+testing(test_df, result_from_training)
+```
+
+# Aussies Dataset
+
+```{r}
+df <- read.csv("aussies.csv")
+```
+
+```{r}
+df$LBM <- ifelse(df$LBM <= 60, 60, df$LBM)
+df$LBM <- ifelse(df$LBM > 60 & df$LBM <= 70, 70, df$LBM)
+df$LBM <- ifelse(df$LBM > 70 & df$LBM <= 80, 80, df$LBM)
+df$LBM <- ifelse(df$LBM > 80, 90, df$LBM)
+df$LBM <- factor(df$LBM)
+
+df <- df[(df$SportN != 3) & (df$SportN != 8) & (df$SportN != 9), ]
+#df$SportN <- ifelse(df$SportN > 60 & df$SportN <= 70, 70, df$SportN)
+df$SportN <- factor(df$SportN)
+```
+
+
+```{r}
+training_prop <- 0.8
+n_observ <- dim(df)[1]
+size <-  training_prop * n_observ
+samp <- sort(sample(seq(n_observ), size = size))
+train_df <- df[samp,]
+test_df <- df[-samp,]
+```
+
+
+## Case 1: Normal
+```{r}
+result_from_training <- training(train_df = train_df, 
+                                 cols_tobeCoded = c("LBM"), 
+                                 other_predictors = c("Ht", "Wt"),
+                                 y_col =  c("RCC"),
+                                 seed = 999,
+                                 standardize = TRUE,
+                                 intercept = TRUE)
+```
+
+```{r}
+testing(test_df, result_from_training)
+```
+
+## Case 2: Categorial Outcome Variable 
+### (training dataset should have enough instances within each categorical outcome)
+
+```{r}
+source("function_0822.R")
+result_from_training <- training(train_df = train_df, 
+                                 cols_tobeCoded = c("LBM"), 
+                                 other_predictors = c("Ht", "Wt", "RCC", "WCC"),
+                                 y_col =  c("SportN"),
+                                 seed = 999,
+                                 standardize = TRUE,
+                                 intercept = TRUE)
+```
+
+```{r}
+testing(test_df, result_from_training)
+```
