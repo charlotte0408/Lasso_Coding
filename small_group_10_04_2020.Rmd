@@ -55,7 +55,7 @@ df$Company <- factor(df$Company, levels = reordered_levels)
 
 ### Helmert Coding for Collapsing Small Groups
 ```{r}
-## splitting training and testing dataset
+## split training and testing dataset
 training_prop <- 0.6
 n_observ <- dim(df)[1]
 size <-  training_prop * n_observ
@@ -64,7 +64,7 @@ train_df <- df[samp,]
 test_df <- df[-samp,]
 y_train <- data.matrix(train_df$Price_euros)
   
-## preparing for coding strategy and reference groups
+## prepare for coding strategy and reference groups
 cols_tobeCoded <- c("Inches", 
                     "Ram", 
                     "OpSys", 
@@ -101,7 +101,7 @@ for (col in cols_tobeCoded) {
 
 ### Dummy Coding for Collapsing Small Groups
 ```{r}
-## splitting training and testing dataset
+## split training and testing dataset
 training_prop <- 0.6
 n_observ <- dim(df)[1]
 size <-  training_prop * n_observ
