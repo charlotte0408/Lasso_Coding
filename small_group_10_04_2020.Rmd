@@ -1,0 +1,169 @@
+---
+title: "small_group"
+author: "Yihuan Huang"
+date: "10/3/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+source("function_0822.R")
+library(stats)
+library(dplyr)
+library ("ISLR")
+library (glmnet)
+library(gglasso)
+library(stringr)
+```
+
+# Laptop Dataset
+## data preprocessing
+factor variables: Inches, Ram, OpSys, Company, TypeName, Memory_recoded
+Numeric variables: Weight
+```{r}
+df <- read.csv("laptops.csv")
+df$Weight <- str_extract(df$Weight, "\\d\\.?+\\d?")
+df$Weight <- as.numeric(df$Weight)
+
+reordered_levels <- levels(df$Memory)[order(table(df$Memory))]
+df$Memory_reordered <- factor(df$Memory, levels = reordered_levels)
+df$Memory_reordered <- droplevels(factor(df$Memory, levels = reordered_levels))
+
+df$Inches <- as.factor(df$Inches)
+reordered_levels <- levels(df$Inches)[order(table(df$Inches))]
+df$Inches <- factor(df$Inches, levels = reordered_levels)
+
+df$Ram <- as.factor(df$Ram)
+reordered_levels <- levels(df$Ram)[order(table(df$Ram))]
+df$Ram <- factor(df$Ram, levels = reordered_levels)
+
+df$OpSys <- as.factor(df$OpSys)
+reordered_levels <- levels(df$OpSys)[order(table(df$OpSys))]
+df$OpSys <- factor(df$OpSys, levels = reordered_levels)
+
+df$TypeName <- as.factor(df$TypeName)
+reordered_levels <- levels(df$TypeName)[order(table(df$TypeName))]
+df$TypeName <- factor(df$TypeName, levels = reordered_levels)
+
+df$Company <- as.factor(df$Company)
+reordered_levels <- levels(df$Company)[order(table(df$Company))]
+df$Company <- factor(df$Company, levels = reordered_levels)
+```
+
+### Helmert Coding for Collapsing Small Groups
+```{r}
+## splitting training and testing dataset
+training_prop <- 0.6
+n_observ <- dim(df)[1]
+size <-  training_prop * n_observ
+samp <- sort(sample(seq(n_observ), size =size))
+train_df <- df[samp,]
+test_df <- df[-samp,]
+y_train <- data.matrix(train_df$Price_euros)
+  
+## preparing for coding strategy and reference groups
+cols_tobeCoded <- c("Inches", 
+                    "Ram", 
+                    "OpSys", 
+                    "TypeName", 
+                    "Company", 
+                    "Memory_reordered")
+strategy_group <- rep(3, length(cols_tobeCoded)) ## 3 is the index of Helmert coding
+ref_group <- list()
+for (col in cols_tobeCoded) {
+  nlevel <- length(levels(train_df[, col]))
+  ref_group <- c(ref_group, list(seq(nlevel)))
+}
+  
+## fitting models
+result <- ref_encoding(train_df = train_df, 
+                       cols_tobeCoded = cols_tobeCoded, 
+                       y_train = y_train, 
+                       strategy_group = strategy_group, 
+                       ref_group = ref_group, 
+                       intercept = TRUE,
+                       fit_family = "gaussian")
+model_coef <- coef(result$coef)
+
+total_level <- 1
+min_nonzero_results <- c()
+for (col in cols_tobeCoded) {
+  nlevel <- length(levels(train_df[, col]))
+  coefs <- model_coef[-c(1), 1][total_level:(total_level + nlevel - 2)]
+  min_nonzero <- min(which((coefs != 0)))
+  print(min_nonzero)
+  total_level <- total_level + nlevel - 1
+}
+```
+
+### Dummy Coding for Collapsing Small Groups
+```{r}
+## splitting training and testing dataset
+training_prop <- 0.6
+n_observ <- dim(df)[1]
+size <-  training_prop * n_observ
+samp <- sort(sample(seq(n_observ), size =size))
+train_df <- df[samp,]
+test_df <- df[-samp,]
+y_train <- data.matrix(train_df$Price_euros)
+
+## specify the variable to be collapsed
+var <- "Inches"
+cols_tobeCoded <- c("Inches", ## the var to be collapsed should be put at the first 
+                    "Ram", 
+                    "OpSys", 
+                    "TypeName", 
+                    "Company", 
+                    "Memory_reordered")
+### Here is another example ###
+#var <- "Ram"
+#cols_tobeCoded <- c("Ram", ## the var to be collapsed should be put at the first 
+#                    "Inches", 
+#                    "OpSys", 
+#                    "TypeName", 
+#                    "Company", 
+#                    "Memory_reordered")
+
+## reorganize levels of the var to be collapsed in a ascending order of the instances
+train_df[[var]] <- droplevels(train_df[[var]])
+reordered_levels <- levels(train_df[[var]])[order(table(train_df[[var]]))]
+train_df[[var]] <- factor(train_df[[var]], levels = reordered_levels)
+train_df$var <- train_df[[var]]
+
+## define strategy group as dummy
+strategy_group <- rep(1, length(cols_tobeCoded))
+  
+## specify levels to be classifed according to the `ninstance` variable
+ninstance <- 10
+tobeClassified <- which(table(train_df[[var]]) <= ninstance)
+not_tobeClassified <- which(table(train_df[[var]]) > ninstance)
+classification_result <- list()
+
+## fitting models
+for (index in tobeClassified) {
+  indexes <- c(index, not_tobeClassified)
+  train_classified <- train_df[train_df[[var]] %in% levels(train_df[[var]])[indexes], ]
+  train_classified[[var]] <- droplevels(train_classified[[var]])
+  ytrain_classified <- y_train[train_df[[var]] %in% levels(train_df[[var]])[indexes], ]
+  result <- ref_encoding(train_df = train_classified, 
+                       cols_tobeCoded = cols_tobeCoded, 
+                       y_train = ytrain_classified, 
+                       strategy_group = strategy_group, 
+                       ref_group = strategy_group, 
+                       intercept = TRUE,
+                       fit_family = "gaussian")
+  model_coef <- coef(result$coef)
+  print(model_coef)
+  desti <- min(which(model_coef == 0)) - 1
+
+  classification_result <- c(classification_result, 
+                             list(paste(c(reordered_levels[index], reordered_levels[desti + length(tobeClassified)]), collapse = " -> ")))
+  
+}
+
+print(classification_result)
+```
+
